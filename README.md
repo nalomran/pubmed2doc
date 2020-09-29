@@ -75,6 +75,8 @@ install the aforementioned dependencies within such environment (OPTIONAL):
     ```bash
     sudo pip install -r requirements.txt
     ```
+- You will be prompted to enter a password if you run the  ```sudo``` command, the password is
+the root password (system administrator) of the computer you are currently running.
 
 ## Running the Module (pubmed2doc.py)
 
