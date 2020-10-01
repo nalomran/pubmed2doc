@@ -100,10 +100,22 @@ check the presence of the module by running the following command:
 
     + -sopt: type of returned results display options (citation or listview)
     (OPTIONAL) (Default is citation)
+    
+    + -mndate: custom start or minimum publication date (OPTIONAL)"
+
+    + -mxdate: custom end or maximum publication date (OPTIONAL)"
   
+  
+* #### List All Module Parameters
+
+    - You can list all the module parameters by running the following command:
+    
+    ```bash
+    python pubmed2doc.py -h 
+    ```
 
 * #### Output
-    + a Word or PDF document consists of the results from PubMed according to the type of display option 
+    + A Word or PDF document consists of the results from PubMed according to the type of display option 
     chosen by the user
   
 

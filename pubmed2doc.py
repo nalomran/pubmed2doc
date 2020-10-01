@@ -33,6 +33,10 @@ Input + Options
     + -sopt: type of returned results display options (citation or listview)
     (OPTIONAL) (Default is citation)
 
+    + -mndate: custom start or minimum publication date (OPTIONAL)"
+
+    + -mxdate: custom end or maximum publication date (OPTIONAL)"
+
 
 
 Output
@@ -47,7 +51,7 @@ How to Run
     # to write to a Word file with the display option listview for the
     query "gene expression"
 
-    python pubmed2doc2.py \
+    python pubmed2doc.py \
     -q "gene expression" \
     -e "your_email" \
     -pdf F \
@@ -57,7 +61,7 @@ How to Run
     # to write to a Word file with the display option citation for the query
     "gene expression"
 
-    python pubmed2doc2.py \
+    python pubmed2doc.py \
     -q "gene expression" \
     -e "your_email" \
     -pdf F \
@@ -66,16 +70,29 @@ How to Run
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+import fpdf
 from Bio import Entrez  # type: ignore
 from docx import Document  # type: ignore
 from docx.shared import Pt  # type: ignore
 from fpdf import FPDF  # type: ignore
 
+fpdf.set_global("SYSTEM_TTFONTS",
+                os.path.join(os.path.dirname(__file__),
+                             'font'))
 
-def query_search_pubmed(query: str, ret_max: str, email: str):
+
+
+
+def query_search_pubmed(query: str,
+                        ret_max: str,
+                        email: str,
+                        min_date: str,
+                        max_date: str
+                        ):
     """Search PubMed via the user's query supplied through the command line
 
     Parameters
@@ -86,6 +103,10 @@ def query_search_pubmed(query: str, ret_max: str, email: str):
 
     ret_max: total number of records from query to be retrieved
 
+    min_date: the minimum or start date to search
+
+    max_date: the maximum or end date to search
+
 
     Return
     -------
@@ -95,14 +116,26 @@ def query_search_pubmed(query: str, ret_max: str, email: str):
 
     Entrez.email = email
 
-    # search the PubMed db for the entered query
-    search = Entrez.esearch(
-        db="pubmed",
-        term=query,
-        sort="relevance",
-        retmode="text",
-        retmax=ret_max,
-    )
+    if min_date and max_date:
+        # search the PubMed db for the entered query
+        search = Entrez.esearch(
+            db="pubmed",
+            term=query,
+            sort="relevance",
+            retmode="text",
+            retmax=ret_max,
+            mindate=min_date,
+            maxdate=max_date
+        )
+    else:
+        # search the PubMed db for the entered query
+        search = Entrez.esearch(
+            db="pubmed",
+            term=query,
+            sort="relevance",
+            retmode="text",
+            retmax=ret_max
+        )
 
     search_records = Entrez.read(search)
     search.close()
@@ -110,7 +143,7 @@ def query_search_pubmed(query: str, ret_max: str, email: str):
     # get the list of ids for the searched records
     list_ids = search_records['IdList']
 
-    print(f"\nTotal of {len(list_ids)} records found")
+    print(f"\nTotal of {len(list_ids)} records retrieved!")
 
     ids = ",".join(list_ids)
 
@@ -145,8 +178,7 @@ def records_iterator(pubmed_results):
 
         # handle Unicode Encode Error due to some unusual characters in the
         # authors names for PDF only
-        authors = ", ".join(list(paper['AuthorList'])).encode(
-            'latin-1', 'replace').decode('latin-1')
+        authors = ", ".join(list(paper['AuthorList']))
 
         title = paper['Title']
 
@@ -156,7 +188,10 @@ def records_iterator(pubmed_results):
 
         vol_issue = f"{paper['Volume']}({paper['Issue']}):{paper['Pages']}"
 
-        doi = f"doi: {paper['DOI']}"
+        try:
+            doi = f"doi: {paper['DOI']}"
+        except KeyError:
+            doi = "doi: Not Available"
 
         pmid = f"PMID: {paper['Id']}"
 
@@ -190,8 +225,13 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
 
     pdf_doc.add_page()
 
+    # add font
+    pdf_doc.add_font("NotoSans", style="",
+                     fname="NotoSans-Regular.ttf",
+                     uni=True)
+
     # setting the font name and size
-    pdf_doc.set_font("Arial", size=12)
+    pdf_doc.set_font("NotoSans", size=12)
 
     # configure the header of the PDF document
     pdf_doc.cell(200, 20, txt="PubMed Search Results", ln=1, align='C')
@@ -374,11 +414,17 @@ def main(args) -> None:
 
     style_method = args.style_opt
 
-    results = query_search_pubmed(query, ret_max, email)
+    min_date_arg = args.min_date
+
+    max_date_arg = args.max_date
+
+
+    results = query_search_pubmed(query, ret_max, email,
+                                  min_date_arg, max_date_arg)
 
     # create a directory named "output" if it doesn't exists
     if not Path("output").exists():
-        print(f"\ncreating output directory named 'output'...\n")
+        print(f"\ncreating output directory named 'output'...")
         Path('output').mkdir(parents=True, exist_ok=True)
 
     to_pdf = args.to_pdf
@@ -445,6 +491,18 @@ def run_command_lines() -> None:
                         help="type of returned results style format "
                              "(citation or listview) (OPTIONAL) "
                              "(Default is citation)")
+
+    parser.add_argument('-mndate',
+                        dest="min_date",
+                        default=None,
+                        help="custom start or minimum publication date "
+                             "(OPTIONAL)")
+
+    parser.add_argument('-mxdate',
+                        dest="max_date",
+                        default=None,
+                        help="custom end or maximum publication date "
+                             "(OPTIONAL)")
 
     args = parser.parse_args()
 
