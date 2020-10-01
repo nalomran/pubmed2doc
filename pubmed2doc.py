@@ -85,8 +85,6 @@ fpdf.set_global("SYSTEM_TTFONTS",
                              'font'))
 
 
-
-
 def query_search_pubmed(query: str,
                         ret_max: str,
                         email: str,
@@ -205,7 +203,7 @@ def records_iterator(pubmed_results):
         yield authors, title, journal, pub_date, vol_issue, doi, pmid, pmcid
 
 
-def write_to_pdf(pubmed_results, style_method: str) -> None:
+def write_to_pdf(pubmed_results, style_method: str, query: str) -> None:
     """Write the PubMed results to PDF
 
 
@@ -215,6 +213,8 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
 
     style_method: the style to be written to a PDF file
     (citation or listview)
+
+    query: a query to be searched against PubMed database
 
     Return
     -------
@@ -234,7 +234,8 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
     pdf_doc.set_font("NotoSans", size=12)
 
     # configure the header of the PDF document
-    pdf_doc.cell(200, 20, txt="PubMed Search Results", ln=1, align='C')
+    pdf_doc.cell(200, 20, txt=f"Search Results for {query.title()}",
+                 ln=1, align='C')
 
     pdf_doc.set_display_mode(zoom='real')
 
@@ -249,14 +250,14 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
             # the following add the information retrieved from the PubMed
             # results
             pdf_doc.multi_cell(180, 7, txt=str(i) + ': ' +
-                               authors + '. ' +
-                               title + ' ' +
-                               journal + '. ' +
-                               pub_date + ';' +
-                               vol_issue + '. ' +
-                               doi + '. ' +
-                               pmid + '; ' +
-                               pmcid + '.')
+                                           authors + '. ' +
+                                           title + ' ' +
+                                           journal + '. ' +
+                                           pub_date + ';' +
+                                           vol_issue + '. ' +
+                                           doi + '. ' +
+                                           pmid + '; ' +
+                                           pmcid + '.')
 
             # add line break
             pdf_doc.ln(h='2')
@@ -265,7 +266,7 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
         else:
 
             pdf_doc.multi_cell(180, 7, txt=str(i) + ': ' + "Authors: " +
-                               authors)
+                                           authors)
 
             pdf_doc.multi_cell(180, 7, txt="Title: " + title)
 
@@ -274,7 +275,7 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
                          align='L')
 
             pdf_doc.cell(50, 7, txt="Publication Date: " +
-                         pub_date,
+                                    pub_date,
                          ln=2,
                          align='L')
 
@@ -296,7 +297,7 @@ def write_to_pdf(pubmed_results, style_method: str) -> None:
     print("\nDone writing.")
 
 
-def write_to_word(pubmed_results, style_method: str) -> None:
+def write_to_word(pubmed_results, style_method: str, query: str) -> None:
     """Write the PubMed results to Word
 
 
@@ -306,6 +307,9 @@ def write_to_word(pubmed_results, style_method: str) -> None:
 
     style_method: the style to be written to a PDF file
     (citation or listview)
+
+    query: a query to be searched against PubMed database
+
 
     Return
     -------
@@ -324,7 +328,8 @@ def write_to_word(pubmed_results, style_method: str) -> None:
     # handling header configurations
     header = document.add_paragraph()
     header.alignment = 1  # center the title
-    header.add_run('PubMed Search Results')  # .bold = True
+    header.add_run(
+        f'PubMed Search Results for {query.title()}')  # .bold = True
 
     records = records_iterator(pubmed_results)
 
@@ -418,7 +423,6 @@ def main(args) -> None:
 
     max_date_arg = args.max_date
 
-
     results = query_search_pubmed(query, ret_max, email,
                                   min_date_arg, max_date_arg)
 
@@ -431,11 +435,12 @@ def main(args) -> None:
 
     to_word = args.to_word
 
-    if to_pdf:
-        write_to_pdf(results, style_method)
+    if to_word:
+        write_to_word(results, style_method, query)
+        to_pdf = False  # PDF writing is displayed
 
-    elif to_word:
-        write_to_word(results, style_method)
+    if to_pdf:
+        write_to_pdf(results, style_method, query)
 
 
 def run_command_lines() -> None:
@@ -475,7 +480,7 @@ def run_command_lines() -> None:
     parser.add_argument('-word',
                         dest="to_word",
                         type=bool_conv_args,
-                        default=True,
+                        default=False,
                         help="write Pubmed results to Word (OPTIONAL) "
                              "(Default value is False)")
 
