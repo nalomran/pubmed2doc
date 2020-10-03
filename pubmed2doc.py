@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Pubmed To Documents
+"""Pubmed To Document
 
 Created on Sep, 18 2020
 
@@ -13,8 +13,8 @@ Please visit the README file for more information about the module and some of
 its advantages.
 
 The user needs to supply a query to search against the PubMed database and an
-email address to access the PubMed database. More arguments are also
-shown below:
+email address to access the PubMed database. The list of arguments for the
+the module are shown below:
 
 Input + Options
 ----------------
@@ -399,7 +399,7 @@ def bool_conv_args(args: str) -> bool:
 
 
 def main(args) -> None:
-    """Directs the operations and processes in this module
+    """Direct the operations and processes in this module
 
     Parameters
     ----------
@@ -437,7 +437,7 @@ def main(args) -> None:
 
     if to_word:
         write_to_word(results, style_method, query)
-        to_pdf = False  # PDF writing is displayed
+        to_pdf = False  # PDF writing is disabled
 
     if to_pdf:
         write_to_pdf(results, style_method, query)
