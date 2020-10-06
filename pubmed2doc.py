@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Pubmed To Documents
+"""Pubmed To Document
 
 Created on Sep, 18 2020
 
@@ -13,8 +13,8 @@ Please visit the README file for more information about the module and some of
 its advantages.
 
 The user needs to supply a query to search against the PubMed database and an
-email address to access the PubMed database. More arguments are also
-shown below:
+email address to access the PubMed database. The list of arguments for the
+the module are shown below:
 
 Input + Options
 ----------------
@@ -36,6 +36,8 @@ Input + Options
     + -mndate: custom start or minimum publication date (OPTIONAL)"
 
     + -mxdate: custom end or maximum publication date (OPTIONAL)"
+
+    + is_abstract: include abstract to your search results
 
 
 
@@ -74,8 +76,9 @@ import os
 import sys
 from pathlib import Path
 
+import docx  # type: ignore
 import fpdf
-from Bio import Entrez  # type: ignore
+from Bio import Entrez, Medline  # type: ignore
 from docx import Document  # type: ignore
 from docx.shared import Pt  # type: ignore
 from fpdf import FPDF  # type: ignore
@@ -132,7 +135,8 @@ def query_search_pubmed(query: str,
             term=query,
             sort="relevance",
             retmode="text",
-            retmax=ret_max
+            retmax=ret_max,
+            usehistory='y'
         )
 
     search_records = Entrez.read(search)
@@ -146,25 +150,30 @@ def query_search_pubmed(query: str,
     ids = ",".join(list_ids)
 
     # return document summaries as a result handle
-    fetch_records = Entrez.esummary(
+    fetch_records = Entrez.efetch(
         db="pubmed",
         id=ids,
+        rettype="Medline",
         retmode="text",
-        rettype="medline",
+        webenv=search_records['WebEnv'],
+        query_key=search_records['QueryKey']
+
     )
 
-    search_results = Entrez.read(fetch_records)
-    fetch_records.close()
+    search_results = Medline.parse(fetch_records)
+    # fetch_records.close()
 
     return search_results
 
 
-def records_iterator(pubmed_results):
+def records_iterator(pubmed_results, is_abstract: bool):
     """Iterates over the records returned from PubMed results
 
     Parameters
     ----------
     pubmed_results: PubMed results stored in Bio.Entrez.Parser.ListElement
+
+    is_abstract: include abstract to your search results
 
     Return
     -------
@@ -173,39 +182,48 @@ def records_iterator(pubmed_results):
     """
 
     for paper in pubmed_results:
-
         # handle Unicode Encode Error due to some unusual characters in the
         # authors names for PDF only
-        authors = ", ".join(list(paper['AuthorList']))
+        authors = ", ".join(list(paper['AU']))
 
-        title = paper['Title']
+        title = paper['TI']
 
-        journal = paper['FullJournalName']
+        abstract = paper['AB']
 
-        pub_date = paper['PubDate']
+        journal = paper['JT']
 
-        vol_issue = f"{paper['Volume']}({paper['Issue']}):{paper['Pages']}"
+        pub_date = paper['DP']
 
-        try:
-            doi = f"doi: {paper['DOI']}"
-        except KeyError:
-            doi = "doi: Not Available"
+        so = paper['SO'].split('doi')
 
-        pmid = f"PMID: {paper['Id']}"
+        vol_issue = f"{so[0].split()[-1]}"
+
+        doi = so[-1]
+
+        pmid = f"PMID: {paper['PMID']}"
 
         # handle pmcid in case if it is unavailable
         try:
-            pmcid = paper['ArticleIds']['pmcid'].split(";")[0]
+            pmcid = f"pmcid: {paper['PMC']}"
 
         except KeyError:
-            pmcid = 'pmc-id: un-available'
+            pmcid = 'pmcid: Not Available'
 
-        yield authors, title, journal, pub_date, vol_issue, doi, pmid, pmcid
+        if is_abstract:
+            yield (authors, title, journal, pub_date, vol_issue, doi,
+                   pmid, pmcid, abstract)
+
+        else:
+            yield (authors, title, journal, pub_date, vol_issue, doi,
+                   pmid, pmcid)
 
 
-def write_to_pdf(pubmed_results, style_method: str, query: str) -> None:
+def write_to_pdf(
+        pubmed_results,
+        style_method: str,
+        query: str,
+        is_abstract: bool) -> None:
     """Write the PubMed results to PDF
-
 
     Parameters
     ----------
@@ -215,6 +233,8 @@ def write_to_pdf(pubmed_results, style_method: str, query: str) -> None:
     (citation or listview)
 
     query: a query to be searched against PubMed database
+
+    is_abstract: include abstract to your search results
 
     Return
     -------
@@ -239,32 +259,37 @@ def write_to_pdf(pubmed_results, style_method: str, query: str) -> None:
 
     pdf_doc.set_display_mode(zoom='real')
 
-    records = records_iterator(pubmed_results)
-
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
+        try:
+            pub_date, vol_issue, doi, pmid, pmcid, abstract = pub_info
+        except ValueError:
+            pub_date, vol_issue, doi, pmid, pmcid = pub_info
 
-        pub_date, vol_issue, doi, pmid, pmcid = pub_info
+        url = f"http://www.ncbi.nlm.nih.gov/pubmed/" + pmid.split()[-1]
 
         if style_method == 'citation':
-
             # the following add the information retrieved from the PubMed
             # results
+            pdf_doc.set_text_color(0, 0, 0)
             pdf_doc.multi_cell(180, 7, txt=str(i) + ': ' +
                                            authors + '. ' +
                                            title + ' ' +
                                            journal + '. ' +
                                            pub_date + ';' +
-                                           vol_issue + '. ' +
-                                           doi + '. ' +
+                                           vol_issue +
+                                           " doi" + doi + ' ' +
                                            pmid + '; ' +
-                                           pmcid + '.')
+                                           pmcid + '. ' +
+                                           url + '.'
+                               )
+            pdf_doc.set_text_color(0, 0, 255)
 
             # add line break
             pdf_doc.ln(h='2')
 
         # selecting the other style "the listview"
         else:
-
+            pdf_doc.set_text_color(0, 0, 0)
             pdf_doc.multi_cell(180, 7, txt=str(i) + ': ' + "Authors: " +
                                            authors)
 
@@ -283,23 +308,91 @@ def write_to_pdf(pubmed_results, style_method: str, query: str) -> None:
                          ln=2,
                          align='L')
 
-            pdf_doc.cell(50, 7, txt=doi, ln=1, align='L')
+            pdf_doc.cell(50, 7, txt="doi" + doi, ln=1, align='L')
 
             pdf_doc.cell(50, 7, txt=pmid, ln=2, align='L')
 
             pdf_doc.cell(50, 7, txt=pmcid, ln=2, align='L')
 
+            pdf_doc.cell(50, 7, txt="url: " + url, ln=9, align='L')
+
+            try:
+                pdf_doc.multi_cell(190, 7, txt="Abstract: " + abstract,
+                                   align='L')
+            except UnboundLocalError:
+                pdf_doc.ln(h='2')
+                continue
+
             pdf_doc.ln(h='2')
 
-    # write the information above to MS Word file
+    # write the information above to PDF file
     print("\nwriting to a PDF file...")
     pdf_doc.output('output/PubMed_Results.pdf')
     print("\nDone writing.")
 
 
-def write_to_word(pubmed_results, style_method: str, query: str) -> None:
-    """Write the PubMed results to Word
+def add_hyperlink(paragraph, url, text, color, underline):
+    """ A function that places a hyperlink within a paragraph object.
+    This function is taking from the github issue in the following link:
+    # https://github.com/python-openxml/python-docx/issues/74 for pyhton-docx
 
+    Parameters
+    ----------
+    paragraph: The paragraph we are adding the hyperlink to.
+    url: A string containing the required url
+    text: The text displayed for the url
+
+    Return
+    -------
+    The hyperlink object
+    """
+
+    # This gets access to the document.xml.rels file and gets a new relation
+    # id value
+    part = paragraph.part
+    r_id = part.relate_to(url,
+                          docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK,
+                          is_external=True)
+
+    # Create the w:hyperlink tag and add needed values
+    hyperlink = docx.oxml.shared.OxmlElement('w:hyperlink')
+    hyperlink.set(docx.oxml.shared.qn('r:id'), r_id, )
+
+    # Create a w:r element
+    new_run = docx.oxml.shared.OxmlElement('w:r')
+
+    # Create a new w:rPr element
+    rPr = docx.oxml.shared.OxmlElement('w:rPr')
+
+    # Add color if it is given
+    if not color is None:
+        c = docx.oxml.shared.OxmlElement('w:color')
+        c.set(docx.oxml.shared.qn('w:val'), color)
+        rPr.append(c)
+
+    # Remove underlining if it is requested
+    if not underline:
+        u = docx.oxml.shared.OxmlElement('w:u')
+        u.set(docx.oxml.shared.qn('w:val'), 'none')
+        rPr.append(u)
+
+    # Join all the xml elements together add the required text to the
+    # w:r element
+    new_run.append(rPr)
+    new_run.text = text
+    hyperlink.append(new_run)
+
+    paragraph._p.append(hyperlink)
+
+    return hyperlink
+
+
+def write_to_word(pubmed_results,
+                  style_method: str,
+                  query: str,
+                  is_abstract: bool) -> None:
+
+    """Write the PubMed results to Word
 
     Parameters
     ----------
@@ -310,6 +403,7 @@ def write_to_word(pubmed_results, style_method: str, query: str) -> None:
 
     query: a query to be searched against PubMed database
 
+    is_abstract: include abstract to your search results
 
     Return
     -------
@@ -331,22 +425,35 @@ def write_to_word(pubmed_results, style_method: str, query: str) -> None:
     header.add_run(
         f'PubMed Search Results for {query.title()}')  # .bold = True
 
-    records = records_iterator(pubmed_results)
-
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
 
-        pub_date, vol_issue, doi, pmid, pmcid = pub_info
+        try:
+            pub_date, vol_issue, doi, pmid, pmcid, abstract = pub_info
+        except ValueError:
+            pub_date, vol_issue, doi, pmid, pmcid = pub_info
+
+        url = f"http://www.ncbi.nlm.nih.gov/pubmed/" + pmid.split()[-1]
 
         if style_method == 'citation':
-            document.add_paragraph(str(i) + ': ' +
-                                   authors + '. ' +
-                                   title + ' ' +
-                                   journal + '. ' +
-                                   pub_date + ';' +
-                                   vol_issue + '. ' +
-                                   doi + '. ' +
-                                   pmid + '; ' +
-                                   pmcid + '.')
+
+            paragraph = document.add_paragraph(str(i) + ': ' +
+                                               authors + '. ' +
+                                               title + ' ' +
+                                               journal + '. ' +
+                                               pub_date + ';' +
+                                               vol_issue + ' ' +
+                                               "doi" + doi + ' ' +
+                                               pmid + '; ' +
+                                               pmcid + '.'
+                                               )
+
+            # to include the url as part of the citation
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(1)
+
+            # for url hyperlink
+            add_hyperlink(document.add_paragraph(), url, url, 'blue',
+                          True)
 
         else:
 
@@ -359,13 +466,21 @@ def write_to_word(pubmed_results, style_method: str, query: str) -> None:
 
             document.add_paragraph("Publication Date: " + pub_date)
 
-            document.add_paragraph("Volume, Issue, pages: " + vol_issue)
+            document.add_paragraph("Volume, Issue, Pages: " + vol_issue)
 
-            document.add_paragraph(doi)
+            document.add_paragraph("doi" + doi)
 
             document.add_paragraph(pmid)
 
             document.add_paragraph(pmcid)
+
+            add_hyperlink(document.add_paragraph('Url: '),
+                          url, url, 'blue', True)
+
+            try:
+                document.add_paragraph("Abstract: " + abstract)
+            except UnboundLocalError:
+                continue
 
     # write the information above to MS Word file
     print("\nwriting to a MS Word file...")
@@ -399,7 +514,7 @@ def bool_conv_args(args: str) -> bool:
 
 
 def main(args) -> None:
-    """Directs the operations and processes in this module
+    """Direct the operations and processes in this module
 
     Parameters
     ----------
@@ -435,12 +550,14 @@ def main(args) -> None:
 
     to_word = args.to_word
 
+    is_abstract = args.is_abstract
+
     if to_word:
-        write_to_word(results, style_method, query)
-        to_pdf = False  # PDF writing is displayed
+        write_to_word(results, style_method, query, is_abstract)
+        to_pdf = False  # PDF writing is disabled
 
     if to_pdf:
-        write_to_pdf(results, style_method, query)
+        write_to_pdf(results, style_method, query, is_abstract)
 
 
 def run_command_lines() -> None:
@@ -507,6 +624,13 @@ def run_command_lines() -> None:
                         dest="max_date",
                         default=None,
                         help="custom end or maximum publication date "
+                             "(OPTIONAL)")
+
+    parser.add_argument('-abs',
+                        dest="is_abstract",
+                        type=bool_conv_args,
+                        default=False,
+                        help="include abstract to your search results"
                              "(OPTIONAL)")
 
     args = parser.parse_args()
