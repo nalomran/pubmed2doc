@@ -259,6 +259,8 @@ def write_to_pdf(
 
     pdf_doc.set_display_mode(zoom='real')
 
+    records = records_iterator(pubmed_results, is_abstract)
+
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
         try:
             pub_date, vol_issue, doi, pmid, pmcid, abstract = pub_info
@@ -391,7 +393,6 @@ def write_to_word(pubmed_results,
                   style_method: str,
                   query: str,
                   is_abstract: bool) -> None:
-
     """Write the PubMed results to Word
 
     Parameters
@@ -424,6 +425,8 @@ def write_to_word(pubmed_results,
     header.alignment = 1  # center the title
     header.add_run(
         f'PubMed Search Results for {query.title()}')  # .bold = True
+
+    records = records_iterator(pubmed_results, is_abstract)
 
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
 
