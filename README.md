@@ -105,7 +105,8 @@ check the presence of the module by running the following command:
 
     + -mxdate: custom end or maximum publication date (OPTIONAL)"
   
-  
+    + is_abstract: include abstract to your search results
+
 * #### List All Module Parameters
 
     - You can list all the module parameters by running the following command:
