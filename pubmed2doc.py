@@ -75,9 +75,10 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Dict, Generator
 
 import docx  # type: ignore
-import fpdf
+import fpdf  # type: ignore
 from Bio import Entrez, Medline  # type: ignore
 from docx import Document  # type: ignore
 from docx.shared import Pt  # type: ignore
@@ -93,7 +94,7 @@ def query_search_pubmed(query: str,
                         email: str,
                         min_date: str,
                         max_date: str
-                        ):
+                        ) -> Generator[Dict, None, None]:
     """Search PubMed via the user's query supplied through the command line
 
     Parameters
@@ -166,7 +167,8 @@ def query_search_pubmed(query: str,
     return search_results
 
 
-def records_iterator(pubmed_results, is_abstract: bool):
+def records_iterator(pubmed_results: Generator[Dict, None, None],
+                     is_abstract: bool):
     """Iterates over the records returned from PubMed results
 
     Parameters
@@ -194,11 +196,11 @@ def records_iterator(pubmed_results, is_abstract: bool):
 
         pub_date = paper['DP']
 
-        so = paper['SO'].split('doi')
+        source = paper['SO'].split('doi')
 
-        vol_issue = f"{so[0].split()[-1]}"
+        vol_issue = f"{source[0].split()[-1]}"
 
-        doi = so[-1]
+        doi = source[-1]
 
         pmid = f"PMID: {paper['PMID']}"
 
@@ -212,14 +214,13 @@ def records_iterator(pubmed_results, is_abstract: bool):
         if is_abstract:
             yield (authors, title, journal, pub_date, vol_issue, doi,
                    pmid, pmcid, abstract)
-
         else:
             yield (authors, title, journal, pub_date, vol_issue, doi,
                    pmid, pmcid)
 
 
 def write_to_pdf(
-        pubmed_results,
+        pubmed_results: Generator[Dict, None, None],
         style_method: str,
         query: str,
         is_abstract: bool) -> None:
@@ -228,6 +229,7 @@ def write_to_pdf(
     Parameters
     ----------
     pubmed_results: PubMed results stored in Bio.Entrez.Parser.ListElement
+    it is a basically a Generator of dicts.
 
     style_method: the style to be written to a PDF file
     (citation or listview)
@@ -242,14 +244,11 @@ def write_to_pdf(
     """
 
     pdf_doc = FPDF()
-
     pdf_doc.add_page()
 
     # add font
-    pdf_doc.add_font("NotoSans", style="",
-                     fname="NotoSans-Regular.ttf",
+    pdf_doc.add_font("NotoSans", style="", fname="NotoSans-Regular.ttf",
                      uni=True)
-
     # setting the font name and size
     pdf_doc.set_font("NotoSans", size=12)
 
@@ -259,9 +258,11 @@ def write_to_pdf(
 
     pdf_doc.set_display_mode(zoom='real')
 
+    # the records that are fetched from PubMed db
     records = records_iterator(pubmed_results, is_abstract)
 
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
+        # attempt to obtain the remaining of paper information with abstract
         try:
             pub_date, vol_issue, doi, pmid, pmcid, abstract = pub_info
         except ValueError:
@@ -318,6 +319,7 @@ def write_to_pdf(
 
             pdf_doc.cell(50, 7, txt="url: " + url, ln=9, align='L')
 
+            # attempt to add abstract to the Word document
             try:
                 pdf_doc.multi_cell(190, 7, txt="Abstract: " + abstract,
                                    align='L')
@@ -328,8 +330,8 @@ def write_to_pdf(
             pdf_doc.ln(h='2')
 
     # write the information above to PDF file
-    print("\nwriting to a PDF file...")
-    pdf_doc.output('output/PubMed_Results.pdf')
+    print(f"\nwriting the {style_method} to a PDF file...")
+    pdf_doc.output(f'output/PubMed_Results_{style_method}.pdf')
     print("\nDone writing.")
 
 
@@ -343,6 +345,8 @@ def add_hyperlink(paragraph, url, text, color, underline):
     paragraph: The paragraph we are adding the hyperlink to.
     url: A string containing the required url
     text: The text displayed for the url
+    color: color of the hyperlink
+    underline: whether the link need to be underlined or not.
 
     Return
     -------
@@ -389,7 +393,7 @@ def add_hyperlink(paragraph, url, text, color, underline):
     return hyperlink
 
 
-def write_to_word(pubmed_results,
+def write_to_word(pubmed_results: Generator[Dict, None, None],
                   style_method: str,
                   query: str,
                   is_abstract: bool) -> None:
@@ -424,12 +428,11 @@ def write_to_word(pubmed_results,
     header = document.add_paragraph()
     header.alignment = 1  # center the title
     header.add_run(
-        f'PubMed Search Results for {query.title()}')  # .bold = True
+        f'PubMed Search Results for {query.title()}')
 
     records = records_iterator(pubmed_results, is_abstract)
 
     for i, (authors, title, journal, *pub_info) in enumerate(records, 1):
-
         try:
             pub_date, vol_issue, doi, pmid, pmcid, abstract = pub_info
         except ValueError:
@@ -438,7 +441,6 @@ def write_to_word(pubmed_results,
         url = f"http://www.ncbi.nlm.nih.gov/pubmed/" + pmid.split()[-1]
 
         if style_method == 'citation':
-
             paragraph = document.add_paragraph(str(i) + ': ' +
                                                authors + '. ' +
                                                title + ' ' +
@@ -485,9 +487,9 @@ def write_to_word(pubmed_results,
             except UnboundLocalError:
                 continue
 
-    # write the information above to MS Word file
-    print("\nwriting to a MS Word file...")
-    document.save('output/PubMed_Results.docx')
+    # write the search results information to MS Word file
+    print(f"\nwriting in {style_method} to a MS Word file...")
+    document.save(f'output/PubMed_Results_{style_method}.docx')
     print("\nDone writing.")
 
 
@@ -584,51 +586,43 @@ def run_command_lines() -> None:
                         dest="query",
                         required=True,
                         help="a query to be searched against PubMed database")
-
     parser.add_argument('-e',
                         dest="email",
                         required=True,
                         help="a user's email to access to the PubMed db")
-
     parser.add_argument('-pdf',
                         dest="to_pdf",
                         type=bool_conv_args,
                         default=True,
                         help="write Pubmed results to PDF (OPTIONAL) "
                              "(Default value is True)")
-
     parser.add_argument('-word',
                         dest="to_word",
                         type=bool_conv_args,
                         default=False,
                         help="write Pubmed results to Word (OPTIONAL) "
                              "(Default value is False)")
-
     parser.add_argument('-retmax',
                         dest="ret_max",
                         default=20,
                         help="total num of records from query to be retrieved "
                              "(OPTIONAL) (Default is 20)")
-
     parser.add_argument('-sopt',
                         dest="style_opt",
                         default="citation",
                         help="type of returned results style format "
                              "(citation or listview) (OPTIONAL) "
                              "(Default is citation)")
-
     parser.add_argument('-mndate',
                         dest="min_date",
                         default=None,
                         help="custom start or minimum publication date "
                              "(OPTIONAL)")
-
     parser.add_argument('-mxdate',
                         dest="max_date",
                         default=None,
                         help="custom end or maximum publication date "
                              "(OPTIONAL)")
-
     parser.add_argument('-abs',
                         dest="is_abstract",
                         type=bool_conv_args,
