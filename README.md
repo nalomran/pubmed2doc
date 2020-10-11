@@ -119,8 +119,9 @@ check the presence of the module by running the following command:
     + A Word or PDF document consists of the results from PubMed according to the type of display option 
     chosen by the user
   
+### 1. Executing it with python command:
 
-* ### Command Example
+* #### Command Example
     ```bash
     python pubmed2doc.py \
     -q "gene expression" \
@@ -133,6 +134,12 @@ check the presence of the module by running the following command:
 above sub-section "Inputs + Options"
 
 * Please note that the output file will be saved in a directory called "output"
+
+### 2. Executing it with the prepared shell script:
+* #### Command Example
+    ```bash
+    example_command.sh
+    ```
 
 * That is it! Please check the output folder for your file
 
