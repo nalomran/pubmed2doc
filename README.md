@@ -140,6 +140,7 @@ above sub-section "Inputs + Options"
     ```bash
     example_command.sh
     ```
+* You can modify the shell script to follow your needs.
 
 * That is it! Please check the output folder for your file
 
